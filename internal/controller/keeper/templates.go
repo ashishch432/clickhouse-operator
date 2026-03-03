@@ -77,9 +77,7 @@ func templateHeadlessService(cr *v1.KeeperCluster) *corev1.Service {
 }
 
 func templatePodDisruptionBudget(cr *v1.KeeperCluster) *policyv1.PodDisruptionBudget {
-	maxUnavailable := intstr.FromInt32(cr.Replicas() / 2)
-
-	return &policyv1.PodDisruptionBudget{
+	pdb := &policyv1.PodDisruptionBudget{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PodDisruptionBudget",
 			APIVersion: "v1",
@@ -93,14 +91,18 @@ func templatePodDisruptionBudget(cr *v1.KeeperCluster) *policyv1.PodDisruptionBu
 			Annotations: controllerutil.MergeMaps(cr.Spec.Annotations),
 		},
 		Spec: policyv1.PodDisruptionBudgetSpec{
-			MaxUnavailable: &maxUnavailable,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					controllerutil.LabelAppKey: cr.SpecificName(),
 				},
 			},
+			MaxUnavailable: new(intstr.FromInt32(cr.Replicas() / 2)),
 		},
 	}
+
+	cr.Spec.PodDisruptionBudget.ApplyOverrides(&pdb.Spec)
+
+	return pdb
 }
 
 type quorumConfig []serverConfig

@@ -67,9 +67,7 @@ func templateHeadlessService(cr *v1.ClickHouseCluster) *corev1.Service {
 }
 
 func templatePodDisruptionBudget(cr *v1.ClickHouseCluster, shardID int32) *policyv1.PodDisruptionBudget {
-	minAvailable := intstr.FromInt32(1)
-
-	return &policyv1.PodDisruptionBudget{
+	pdb := &policyv1.PodDisruptionBudget{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PodDisruptionBudget",
 			APIVersion: "v1",
@@ -84,7 +82,6 @@ func templatePodDisruptionBudget(cr *v1.ClickHouseCluster, shardID int32) *polic
 			Annotations: controllerutil.MergeMaps(cr.Spec.Annotations),
 		},
 		Spec: policyv1.PodDisruptionBudgetSpec{
-			MinAvailable: &minAvailable,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					controllerutil.LabelAppKey:            cr.SpecificName(),
@@ -93,6 +90,18 @@ func templatePodDisruptionBudget(cr *v1.ClickHouseCluster, shardID int32) *polic
 			},
 		},
 	}
+
+	// Smart default: single-replica shards use maxUnavailable=1 to avoid
+	// drain deadlocks; multi-replica shards use minAvailable=1 for HA.
+	if cr.Replicas() <= 1 {
+		pdb.Spec.MaxUnavailable = new(intstr.FromInt32(1))
+	} else {
+		pdb.Spec.MinAvailable = new(intstr.FromInt32(1))
+	}
+
+	cr.Spec.PodDisruptionBudget.ApplyOverrides(&pdb.Spec)
+
+	return pdb
 }
 
 func templateClusterSecrets(cr *v1.ClickHouseCluster, secret *corev1.Secret) bool {

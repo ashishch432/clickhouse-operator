@@ -426,9 +426,17 @@ func (r *keeperReconciler) reconcileCommonResources(ctx context.Context, log ctr
 		return nil, fmt.Errorf("reconcile service resource: %w", err)
 	}
 
-	pdb := templatePodDisruptionBudget(r.Cluster)
-	if _, err := r.ReconcilePodDisruptionBudget(ctx, log, pdb, v1.EventActionReconciling); err != nil {
-		return nil, fmt.Errorf("reconcile PodDisruptionBudget resource: %w", err)
+	if !r.Cluster.Spec.PodDisruptionBudget.Ignored() {
+		pdb := templatePodDisruptionBudget(r.Cluster)
+		if r.Cluster.Spec.PodDisruptionBudget.Enabled() {
+			if _, err := r.ReconcilePodDisruptionBudget(ctx, log, pdb, v1.EventActionReconciling); err != nil {
+				return nil, fmt.Errorf("reconcile PodDisruptionBudget resource: %w", err)
+			}
+		} else {
+			if err := r.Delete(ctx, pdb, v1.EventActionReconciling); err != nil {
+				return nil, fmt.Errorf("delete disabled PodDisruptionBudget resource: %w", err)
+			}
+		}
 	}
 
 	configMap, err := templateQuorumConfig(r)
